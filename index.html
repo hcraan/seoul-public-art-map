@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>서울시 공공미술품 현황</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
+<script src="base.js"></script>
+<script src="data.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; background: #fff; color: #222; }
+  #map { position: absolute; inset: 0; background: #fff; }
+
+  /* ---------- 속성 박스 (이전 지도 디자인) ---------- */
+  .panel { position: absolute; z-index: 10; top: 12px; left: 12px; width: 330px; max-width: calc(100vw - 48px);
+    max-height: calc(100vh - 24px); overflow-y: auto; box-sizing: border-box;
+    background: rgba(255,255,255,.97); border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.18); padding: 14px 16px; font-size: 13px; }
+  .panel h1 { font-size: 15px; font-weight: 700; margin: 0 0 8px; }
+  .lbl { font-size: 12px; color: #555; font-weight: 700; margin: 2px 0 5px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 10px; }
+  .chip { border: 1px solid #c9ced6; border-radius: 6px; background: #fff; color: #444; font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer; }
+  .chip:hover { background: #f3f5f8; }
+  .chip.on { background: #e8eef7; border-color: #9fb4d4; color: #1a3f73; font-weight: 700; }
+  .chips .br { flex-basis: 100%; height: 0; }
+  .showing { font-size: 12px; color: #333; background: #f3f5f8; border-radius: 6px; padding: 5px 8px; margin-bottom: 6px; }
+  .showing b { font-variant-numeric: tabular-nums; }
+
+  .sec { border-top: 2px solid #cbd9ec; padding: 5px 0 3px; }
+  .sec-head { display: flex; align-items: center; gap: 6px; padding: 2px 0 3px; }
+  .sec-head h2 { font-size: 15px; font-weight: 700; margin: 0; color: #1f6fd1; white-space: nowrap; cursor: pointer; }
+  .sec.layer .sec-head h2 { color: #333; }
+  .fold { border: none; background: #eef1f5; color: #333; width: 22px; height: 22px; border-radius: 5px; cursor: pointer;
+    font-size: 11px; line-height: 22px; padding: 0; flex: none; transition: transform .15s; }
+  .fold:hover { background: #dde3ea; }
+  .sec.closed .fold { transform: rotate(-90deg); }
+  .sec.closed .sec-body { display: none; }
+  .sum { color: #777; font-size: 11.5px; white-space: nowrap; }
+  .links { margin-left: auto; font-size: 12px; color: #999; white-space: nowrap; }
+  .links button { border: none; background: none; color: #1a5fb4; cursor: pointer; padding: 0 2px; font-size: 12px; font-family: inherit; }
+  .sec-body { padding: 1px 0 4px 4px; }
+  .row { display: flex; align-items: center; gap: 7px; padding: 3px 0; cursor: pointer; user-select: none; }
+  .row input { margin: 0; flex: none; }
+  .row .cnt { margin-left: auto; color: #555; font-variant-numeric: tabular-nums; font-size: 12px; white-space: nowrap; }
+  .row.zero { color: #aaa; } .row.zero .cnt { color: #bbb; }
+  .row.two { align-items: flex-start; } .row.two input, .row.two .dot, .row.two .ring { margin-top: 3px; }
+  .lab { display: flex; flex-direction: column; }
+  .sub-note { font-size: 11px; color: #999; line-height: 1.3; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; border: 1px solid rgba(0,0,0,.3); flex: none; box-sizing: border-box; }
+  .ring-box { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .ring { border-radius: 50%; border: 1px solid rgba(0,0,0,.35); background: rgba(0,0,0,.08); box-sizing: border-box; }
+  .mark { display: flex; flex: none; align-items: center; }
+  .mark:empty { display: none; }
+  .note { font-size: 11px; color: #999; margin: 2px 0 0 22px; line-height: 1.4; }
+  .toggle-btn { display: none; }
+  .foot { font-size: 11px; color: #888; line-height: 1.5; border-top: 1px solid #e3e3e3; padding-top: 7px; margin-top: 6px; }
+
+  /* ---------- 정보창 ---------- */
+  .maplibregl-popup-content { border-radius: 12px; padding: 14px 16px 12px; box-shadow: 0 3px 14px rgba(0,0,0,.25); }
+  .maplibregl-popup-close-button { font-size: 20px; color: #999; right: 6px; top: 4px; }
+  .pop { width: 300px; font-size: 13px; line-height: 1.5; font-family: "Noto Sans KR", sans-serif; max-height: 46vh; overflow-y: auto; }
+  .pop h3 { margin: 0 0 4px; font-size: 16px; line-height: 1.35; padding-right: 14px; }
+  .ph { background: #f3f3f1; border-radius: 8px; text-align: center; padding: 6px 0; margin: 2px 0 8px; }
+  .ph img { height: 168px; max-width: 100%; border-radius: 4px; display: inline-block; }
+  .ph.none { color: #aaa; font-size: 12px; padding: 18px 0; }
+  .badges { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+  .b { font-size: 11px; padding: 1px 7px; border-radius: 4px; background: #eef1f5; color: #333; }
+  .b.ok { background: #e3f1e6; color: #1d6b35; } .b.no { background: #fde8e6; color: #b3261e; }
+  .b.na { background: #f0f0f0; color: #888; } .b.warn { background: #fff1dc; color: #9a5300; } .b.soon { background: #fff7cf; color: #7a6000; }
+  .pop table { border-collapse: collapse; width: 100%; } .pop td { padding: 2px 0; vertical-align: top; }
+  .pop td:first-child { color: #777; width: 64px; white-space: nowrap; }
+  .raw { font-size: 11px; color: #999; }
+  .psec { border-top: 1px solid #eee; margin-top: 6px; padding-top: 6px; }
+  .desc { color: #444; font-size: 12.5px; }
+  .desc.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .more, .back { color: #1a5fb4; font-size: 12px; cursor: pointer; border: none; background: none; padding: 0; font-family: inherit; }
+  .pfoot { font-size: 11px; color: #aaa; margin-top: 8px; }
+  .li { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid #eee; cursor: pointer; }
+  .li:hover { background: #f7f9fc; }
+  .li .n { flex: 1; min-width: 0; } .li .n b { display: block; font-size: 13.5px; } .li .n span { font-size: 11.5px; color: #888; }
+  .th { width: 44px; height: 44px; object-fit: cover; border-radius: 5px; flex: none; background: #eee; }
+  .arrow { color: #1a5fb4; }
+
+  @media (max-width: 600px) {
+    .panel { width: auto; right: 12px; padding: 10px 12px; max-height: 60vh; }
+    .panel.collapsed .body { display: none; }
+    .toggle-btn { display: inline-block; float: right; border: none; background: none; font-size: 13px; color: #1a5fb4; cursor: pointer; padding: 0; font-family: inherit; }
+    .pop { width: 250px; }
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="panel" id="panel">
+  <button class="toggle-btn" id="toggleBtn">접기</button>
+  <h1>서울시 공공미술품 현황</h1>
+  <div class="body">
+    <div class="lbl">점 색깔 기준</div>
+    <div class="chips" id="colorChips"></div>
+    <div class="lbl">원 면적 기준</div>
+    <div class="chips" id="ringChips"></div>
+    <div class="showing" id="showing"></div>
+    <div id="secs"></div>
+    <div class="sec layer" id="layerSec">
+      <div class="sec-head"><button class="fold" title="펼치기/접기">▼</button><h2>99.지도 레이어</h2></div>
+      <div class="sec-body">
+        <label class="row"><input type="checkbox" data-layer="dong" checked><span>행정동 경계선</span></label>
+        <label class="row"><input type="checkbox" data-layer="road" checked><span>도로망·한강</span></label>
+        <label class="row"><input type="checkbox" data-layer="bld" checked><span>건물·공원</span></label>
+        <div class="note">도로·건물·공원: OpenStreetMap 기준 · 최신 건물 정보는 빠져 있을 수 있음</div>
+      </div>
+    </div>
+    <div class="foot">자료: 서울시 공공미술 관리 현황(원자료 362건) 중 지도 표시 219건 · 횡성 수장고 보관 작품과 자치구 관리 작품(서울시-문체부 공공미술 프로젝트 제외)은 표시하지 않음 · 굵은 테두리 점 = 같은 위치에 작품 여러 점(숫자 = 개수)<br>배경지도 © OpenStreetMap contributors · OpenFreeMap</div>
+  </div>
+</div>
+
+<script>
+// ===================== 카테고리 정의 =====================
+// f[i] 순서: 0 관리기관, 1 유형, 2 분류, 3 시기, 4 용지, 5 생애주기, 6 경과, 7 규격, 8 가액
+const GREY = '#d0d0d0';
+const CATS = [
+  { t: '1.관리기관별', chip: '관리기관', items: [
+    ['서울시', '#1f5fa8'], ['투자출연기관', '#e07b00'], ['자치구', '#2a9d55', '서울시-문체부 공공미술 프로젝트만 표시'] ] },
+  { t: '2.작품 유형별', chip: '유형', items: [
+    ['기념비', '#d1495b'], ['동상', '#edae49'], ['도시갤러리', '#00798c'], ['서울은미술관', '#6a4c93'], ['기타', '#8c8c8c'] ] },
+  { t: '3.작품 분류별', chip: '분류', items: [
+    ['조각', '#3b6fb6'], ['상징탑', '#c8553d'], ['벽화', '#2a9d8f'], ['회화', '#8e5ea2'], ['미디어', '#e9a23b'], ['기타', '#9a9a9a'] ] },
+  { t: '4.설치 시기별', chip: '시기', items: [   // 최근일수록 진하게
+    ['1970년대 이전', '#d4d2e8'], ['1980년대', '#b3b1d6'], ['1990년대', '#9590c4'], ['2000년대', '#7a69b0'], ['2010년대', '#5e3f99'], ['2020년대', '#3f007d'] ] },
+  { t: '5.설치 용지별', chip: '용지', items: [
+    ['시유지', '#1f5fa8'], ['국유지', '#b5651d'], ['구유지', '#2a9d55'], ['민간용지', '#9b59b6'] ] },
+  { t: '6.생애주기별', chip: '생애주기', br: true, items: [
+    ['1~3년', '#c7e9c0'], ['4~5년', '#8fd18a'], ['10~15년', '#41ab5d'], ['20년', '#1b7a3a'], ['영구', '#00441b'],
+    ['영구(추정)', '#4f7f5c', '기념비·동상 중 원자료 빈칸'], ['미정·기타', '#ffffff', '미정, 기업소유 등'], ['정보 없음', GREY] ] },
+  { t: '7.생애주기 경과별', chip: '생애주기 경과', items: [
+    ['기간 지남', '#c0392b', '설치년도 + 생애주기가 2025년 이전'], ['곧 만료 (2026~27년)', '#f0a020'], ['기간 남음', '#2e9e5b'],
+    ['해당 없음 (영구)', '#7b8794'], ['정보 없음', GREY] ] },
+  { t: '8.작품 규격별', ring: 'size', note: '가장 긴 변 기준', items: [
+    ['2m 미만', 150], ['2~5m', 350], ['5~10m', 750], ['10m 이상', 2000], ['미상', null] ] },
+  { t: '9.작품가액별', ring: 'price', items: [
+    ['0원 (기증·무상 등)', null], ['5천만 원 이하', 30], ['5천만~1억 원', 80], ['1억~3억 원', 200], ['3억 원 이상', 600], ['미상', null] ] },
+];
+const COLOR_CATS = [0, 1, 2, 3, 4, 5, 6];
+const RINGS = [['none', '없음'], ['size', '작품 규격'], ['price', '작품가액']];
+const RING_COLOR = { size: '#b0703c', price: '#7a5c99' };
+// 원 반지름(px, 줌 12 기준) — 면적이 값에 비례
+const RING_R = { size: v => Math.sqrt(v) * 0.42, price: v => Math.sqrt(v) * 1.35 };
+
+const state = {
+  color: 0, ring: 'none',
+  sel: CATS.map(c => new Set(c.items.map(i => i[0]))),
+  layers: { dong: true, road: true, bld: true },
+};
+const pass = (a, skip) => CATS.every((c, j) => j === skip || state.sel[j].has(a.f[j]));
+const colorOf = a => CATS[state.color].items.find(i => i[0] === a.f[state.color])[1];
+
+// 같은 좌표 묶기
+const GROUPS = [];
+{ const m = new Map();
+  ART.forEach(a => { const k = a.lat + ',' + a.lng; if (!m.has(k)) { m.set(k, { lat: a.lat, lng: a.lng, items: [] }); GROUPS.push(m.get(k)); } m.get(k).items.push(a); });
+  GROUPS.forEach((g, i) => g.id = i); }
+
+// ===================== 속성 박스 =====================
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function buildPanel() {
+  document.getElementById('colorChips').innerHTML = COLOR_CATS.map(j =>
+    (CATS[j].br ? '<span class="br"></span>' : '') + `<button class="chip" data-c="${j}">${CATS[j].chip}</button>`).join('');
+  document.getElementById('ringChips').innerHTML = RINGS.map(([k, t]) => `<button class="chip" data-r="${k}">${t}</button>`).join('');
+  document.getElementById('secs').innerHTML = CATS.map((c, j) => `
+    <div class="sec${j === 0 ? '' : ' closed'}" data-j="${j}">
+      <div class="sec-head"><button class="fold" title="펼치기/접기">▼</button><h2>${c.t}</h2><span class="sum"></span>
+        <span class="links"><button data-a="1">전체</button>·<button data-a="0">해제</button></span></div>
+      <div class="sec-body">${c.note ? `<div class="note" style="margin:0 0 2px 2px">${c.note}</div>` : ''}${c.items.map((it, k) => `
+        <label class="row${it[2] ? ' two' : ''}" data-k="${k}"><input type="checkbox" checked>
+          <span class="mark"></span><span class="lab">${esc(it[0])}${it[2] ? `<span class="sub-note">${esc(it[2])}</span>` : ''}</span><span class="cnt"></span></label>`).join('')}
+      </div></div>`).join('');
+
+  document.querySelectorAll('#colorChips .chip').forEach(b => b.onclick = () => { state.color = +b.dataset.c; refresh(); });
+  document.querySelectorAll('#ringChips .chip').forEach(b => b.onclick = () => { state.ring = b.dataset.r; refresh(); });
+  document.querySelectorAll('.sec').forEach(sec => {
+    const toggle = () => sec.classList.toggle('closed');
+    sec.querySelector('.fold').onclick = toggle; sec.querySelector('h2').onclick = toggle;
+  });
+  document.querySelectorAll('#secs .sec').forEach(sec => {
+    const j = +sec.dataset.j;
+    sec.querySelectorAll('.links button').forEach(b => b.onclick = () => {
+      state.sel[j] = b.dataset.a === '1' ? new Set(CATS[j].items.map(i => i[0])) : new Set(); refresh(); });
+    sec.querySelectorAll('.row').forEach(row => row.querySelector('input').onchange = e => {
+      const v = CATS[j].items[+row.dataset.k][0]; e.target.checked ? state.sel[j].add(v) : state.sel[j].delete(v); refresh(); });
+  });
+  document.querySelectorAll('[data-layer]').forEach(cb => cb.onchange = () => { state.layers[cb.dataset.layer] = cb.checked; applyLayers(); });
+  const panel = document.getElementById('panel'), tb = document.getElementById('toggleBtn');
+  if (window.innerWidth <= 600) { panel.classList.add('collapsed'); tb.textContent = '펼치기'; }
+  tb.onclick = () => { panel.classList.toggle('collapsed'); tb.textContent = panel.classList.contains('collapsed') ? '펼치기' : '접기'; };
+}
+
+function markHTML(c, j, it) {
+  if (c.ring) {
+    if (it[1] == null) return '<span class="ring-box"></span>';
+    const r = Math.max(2.5, Math.min(8, RING_R[c.ring](it[1]) * 0.5));
+    return `<span class="ring-box"><span class="ring" style="width:${2*r}px;height:${2*r}px;background:${RING_COLOR[c.ring]}33;border-color:${RING_COLOR[c.ring]}99"></span></span>`;
+  }
+  if (j !== state.color) return '';
+  return `<span class="dot" style="background:${it[1]}"></span>`;
+}
+
+function refresh() {
+  document.querySelectorAll('#colorChips .chip').forEach(b => b.classList.toggle('on', +b.dataset.c === state.color));
+  document.querySelectorAll('#ringChips .chip').forEach(b => b.classList.toggle('on', b.dataset.r === state.ring));
+  CATS.forEach((c, j) => {
+    const sec = document.querySelector(`#secs .sec[data-j="${j}"]`);
+    const n = state.sel[j].size;
+    sec.querySelector('.sum').textContent = n === c.items.length ? '(전체)' : n === 0 ? '(꺼짐)' : `(${n}개 선택)`;
+    sec.querySelectorAll('.row').forEach(row => {
+      const it = c.items[+row.dataset.k];
+      const cnt = ART.filter(a => a.f[j] === it[0] && pass(a, j)).length;
+      row.querySelector('input').checked = state.sel[j].has(it[0]);
+      row.querySelector('.cnt').textContent = cnt + '점';
+      row.classList.toggle('zero', cnt === 0);
+      row.querySelector('.mark').outerHTML = `<span class="mark">${markHTML(c, j, it)}</span>`;
+    });
+  });
+  const vis = ART.filter(a => pass(a, -1)).length;
+  document.getElementById('showing').innerHTML = `지도에 표시 중: <b>${vis}</b>점 / 전체 ${ART.length}점`;
+  updateMap();
+}
+
+// ===================== 지도 =====================
+const mask = { type: 'Feature', geometry: { type: 'Polygon', coordinates: [[[100, 20], [150, 20], [150, 50], [100, 50], [100, 20]], SEOUL_OUTLINE.slice().reverse()] } };
+const outline = { type: 'Feature', geometry: { type: 'LineString', coordinates: SEOUL_OUTLINE } };
+const empty = { type: 'FeatureCollection', features: [] };
+const ROAD_MINOR = ['minor', 'service', 'tertiary', 'track'];
+const ROAD_MAJOR = ['motorway', 'trunk', 'primary', 'secondary'];
+const LAYER_GROUPS = { dong: ['dong-line'], road: ['water', 'road-minor-case', 'road-minor', 'road-major', 'rail'], bld: ['park', 'green', 'bld'] };
+
+const map = new maplibregl.Map({
+  container: 'map', attributionControl: false, minZoom: 9.5, maxZoom: 18,
+  bounds: [[126.76, 37.41], [127.19, 37.72]], fitBoundsOptions: { padding: { top: 30, bottom: 30, left: window.innerWidth > 700 ? 360 : 20, right: 30 } },
+  style: {
+    version: 8,
+    glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+    sources: {
+      omt: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },
+      dong: { type: 'geojson', data: DONGS }, mask: { type: 'geojson', data: mask }, outline: { type: 'geojson', data: outline },
+      ring: { type: 'geojson', data: empty }, pts: { type: 'geojson', data: empty },
+    },
+    layers: [
+      { id: 'bg', type: 'background', paint: { 'background-color': '#ffffff' } },
+      { id: 'dong-fill', type: 'fill', source: 'dong', paint: { 'fill-color': '#f1f0ec' } },
+      { id: 'park', type: 'fill', source: 'omt', 'source-layer': 'park', paint: { 'fill-color': '#cfe5c0', 'fill-opacity': 0.95 } },
+      { id: 'green', type: 'fill', source: 'omt', 'source-layer': 'landcover', filter: ['in', ['get', 'class'], ['literal', ['grass', 'wood']]],
+        paint: { 'fill-color': '#dcecd0', 'fill-opacity': 0.85 } },
+      { id: 'water', type: 'fill', source: 'omt', 'source-layer': 'water', paint: { 'fill-color': '#e2ebf2' } },
+      { id: 'bld', type: 'fill', source: 'omt', 'source-layer': 'building', minzoom: 13.5,
+        paint: { 'fill-color': '#dcd8cf', 'fill-outline-color': '#c9c4b8', 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 13.5, 0, 14.5, 1] } },
+      { id: 'road-minor-case', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 13,
+        filter: ['in', ['get', 'class'], ['literal', ROAD_MINOR]], layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#cfcac0', 'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.8, 16, 5.5, 18, 12] } },
+      { id: 'road-minor', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 14,
+        filter: ['in', ['get', 'class'], ['literal', ROAD_MINOR]], layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 14, 0.6, 16, 4, 18, 10] } },
+      { id: 'rail', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 12, filter: ['==', ['get', 'class'], 'rail'],
+        paint: { 'line-color': '#c4c0b8', 'line-width': 1, 'line-dasharray': [3, 2] } },
+      { id: 'road-major', type: 'line', source: 'omt', 'source-layer': 'transportation',
+        filter: ['in', ['get', 'class'], ['literal', ROAD_MAJOR]], layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': ['match', ['get', 'class'], ['motorway', 'trunk'], '#a9a49a', '#bdb8ad'],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, ['match', ['get', 'class'], ['motorway', 'trunk'], 1.2, 0.6], 16, ['match', ['get', 'class'], ['motorway', 'trunk'], 7, 5], 18, 14] } },
+      { id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': '#ffffff' } },
+      { id: 'dong-line', type: 'line', source: 'dong', paint: { 'line-color': '#a8a8a8', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.4, 15, 1] } },
+      { id: 'seoul-line', type: 'line', source: 'outline', paint: { 'line-color': '#555', 'line-width': 1.6 } },
+      { id: 'ring', type: 'circle', source: 'ring', paint: {
+          'circle-color': ['get', 'c'], 'circle-opacity': 0.2, 'circle-stroke-color': ['get', 'c'], 'circle-stroke-opacity': 0.55, 'circle-stroke-width': 1,
+          'circle-radius': ['interpolate', ['exponential', 2], ['zoom'], 10, ['*', ['get', 'r'], 0.5], 12, ['get', 'r'], 16, ['*', ['get', 'r'], 3]] } },
+      { id: 'pts-halo', type: 'circle', source: 'pts', paint: {
+          'circle-color': ['case', ['>', ['get', 'n'], 1], '#111', 'rgba(0,0,0,0.35)'],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, ['case', ['>', ['get', 'n'], 1], 8, 5.6], 16, ['case', ['>', ['get', 'n'], 1], 11.5, 9.1]] } },
+      { id: 'pts', type: 'circle', source: 'pts', paint: {
+          'circle-color': ['get', 'c'], 'circle-stroke-color': ['case', ['>', ['get', 'n'], 1], '#111', '#ffffff'],
+          'circle-stroke-width': ['case', ['>', ['get', 'n'], 1], 0, 1.3],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, ['case', ['>', ['get', 'n'], 1], 5.5, 4], 16, ['case', ['>', ['get', 'n'], 1], 9, 7.5]] } },
+      { id: 'pts-num', type: 'symbol', source: 'pts', filter: ['>', ['get', 'n'], 1],
+        layout: { 'text-field': ['to-string', ['get', 'n']], 'text-font': ['Noto Sans Bold'], 'text-size': 11,
+          'text-offset': [1.1, -1.1], 'text-allow-overlap': true, 'text-ignore-placement': true },
+        paint: { 'text-color': '#111', 'text-halo-color': '#fff', 'text-halo-width': 1.6 } },
+    ],
+  },
+});
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+
+function applyLayers() {
+  Object.entries(LAYER_GROUPS).forEach(([k, ids]) => ids.forEach(id => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', state.layers[k] ? 'visible' : 'none')));
+}
+
+function updateMap() {
+  if (!map.isStyleLoaded() && !map.getSource('pts')) return;
+  const pf = [], rf = [];
+  GROUPS.forEach(g => {
+    const vis = g.items.filter(a => pass(a, -1));
+    if (!vis.length) return;
+    // 여러 점이면 가장 많은 색을 대표색으로
+    const cnt = {}; vis.forEach(a => { const c = colorOf(a); cnt[c] = (cnt[c] || 0) + 1; });
+    const c = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0][0];
+    pf.push({ type: 'Feature', properties: { g: g.id, n: vis.length, c }, geometry: { type: 'Point', coordinates: [g.lng, g.lat] } });
+    if (state.ring !== 'none') {
+      const key = state.ring === 'size' ? 'sizeV' : 'priceV';
+      const vals = vis.map(a => a[key]).filter(v => v != null && v > 0);
+      if (vals.length) {
+        const v = state.ring === 'size' ? Math.max(...vals) : vals.reduce((s, x) => s + x, 0);
+        rf.push({ type: 'Feature', properties: { r: RING_R[state.ring](v) + 3, c: RING_COLOR[state.ring], v }, geometry: { type: 'Point', coordinates: [g.lng, g.lat] } });
+      }
+    }
+  });
+  rf.sort((a, b) => b.properties.v - a.properties.v);   // 큰 원을 아래에
+  map.getSource('pts').setData({ type: 'FeatureCollection', features: pf });
+  map.getSource('ring').setData({ type: 'FeatureCollection', features: rf });
+}
+
+// ===================== 정보창 =====================
+let popup = null;
+function badgeHTML(a) {
+  const life = { '기간 지남': '<span class="b warn">생애주기 지남</span>', '곧 만료 (2026~27년)': '<span class="b soon">생애주기 곧 만료</span>' }[a.f[6]] || '';
+  const portal = { '등록': '<span class="b ok">공공미술포털 등록</span>', '미등록': '<span class="b no">공공미술포털 미등록</span>', '정보 없음': '<span class="b na">포털 등록 정보 없음</span>' }[a.portal];
+  return `<div class="badges"><span class="b">${esc(a.f[1])}</span><span class="b">${esc(a.f[2])}</span>${life}${portal}</div>`;
+}
+function detailHTML(a, back) {
+  const row = (k, v) => v ? `<tr><td>${k}</td><td>${v}</td></tr>` : '';
+  const sizeRaw = [a.sizeRaw && `원문 ${esc(a.sizeRaw)}`, a.comp && `구성 ${esc(a.comp)}`].filter(Boolean).join(', ');
+  const size = a.size === '미상' ? `미상${a.sizeRaw ? ` <span class="raw">(원문 "${esc(a.sizeRaw)}")</span>` : ''}`
+    : `가장 긴 변 ${a.size}${sizeRaw ? ` <span class="raw">(${sizeRaw})</span>` : ''}${a.sizeNote ? `<br><span class="raw">※ ${esc(a.sizeNote)}</span>` : ''}`;
+  const price = esc(a.price) + (a.priceRaw ? ` <span class="raw">(원문 "${esc(a.priceRaw)}")</span>` : '') + (a.priceNote && !a.priceNote.startsWith('사업 전체') && a.priceNote !== '원문 표기 정리' ? `<br><span class="raw">※ ${esc(a.priceNote)}</span>` : '');
+  return `<div class="pop">${back ? '<button class="back" data-back="1">‹ 이 위치의 작품 목록</button>' : ''}
+    ${a.photo ? `<div class="ph"><img src="photos/${a.photo}" alt=""></div>` : '<div class="ph none">사진 없음</div>'}
+    <h3>${esc(a.name)}</h3>${badgeHTML(a)}
+    <table>${row('작가', esc(a.artist))}${row('설치', a.year + '년')}${row('재료', esc(a.mat))}${row('규격', size)}${row('가액', price)}${row('생애주기', esc(a.life))}</table>
+    <div class="psec"><table>${row('관리기관', esc(a.org))}${row('점검부서', esc(a.insp))}${row('소유주', esc(a.owner))}${row('설치 용지', esc(a.land))}${row('사업명', esc(a.biz))}${row('위치', esc(a.addr))}</table></div>
+    ${a.desc ? `<div class="psec"><div class="desc clamp">${esc(a.desc)}</div>${a.desc.length > 90 ? '<button class="more">설명 더보기 ▾</button>' : ''}</div>` : ''}
+    <div class="pfoot">관리번호 ${esc(a.id)}${a.mod ? ' · 자료 최종수정 ' + esc(a.mod) : ''}</div></div>`;
+}
+function listHTML(g, vis) {
+  return `<div class="pop"><h3>이 위치의 작품 ${vis.length}점</h3><div style="font-size:12px;color:#777;margin-bottom:4px">${esc(vis[0].addr)}</div>
+    ${vis.map((a, i) => `<div class="li" data-i="${i}">${a.photo ? `<img class="th" src="photos/${a.photo}" alt="">` : '<span class="th"></span>'}
+      <div class="n"><b>${esc(a.name)}</b><span>${esc(a.artist)} · ${a.year} · ${esc(a.f[1])} · <span style="color:${a.portal === '등록' ? '#1d6b35' : a.portal === '미등록' ? '#b3261e' : '#888'}">포털 ${a.portal === '정보 없음' ? '정보 없음' : a.portal}</span></span></div><span class="arrow">›</span></div>`).join('')}</div>`;
+}
+function openGroup(gid, lngLat) {
+  const g = GROUPS[gid]; const vis = g.items.filter(a => pass(a, -1));
+  if (popup) popup.remove();
+  const narrow = window.innerWidth <= 600;
+  map.easeTo({ center: lngLat, offset: [narrow ? 0 : 170, Math.round(window.innerHeight * (narrow ? 0.3 : 0.28))], duration: 400 });
+  popup = new maplibregl.Popup({ maxWidth: '340px', offset: 12, anchor: 'bottom' }).setLngLat(lngLat).addTo(map);
+  const show = html => {
+    popup.setHTML(html); popup.setLngLat(lngLat);
+    const el = popup.getElement();
+    el.querySelectorAll('.li').forEach(li => li.onclick = () => show(detailHTML(vis[+li.dataset.i], true)));
+    const back = el.querySelector('[data-back]'); if (back) back.onclick = () => show(listHTML(g, vis));
+    const more = el.querySelector('.more'); if (more) more.onclick = () => { el.querySelector('.desc').classList.remove('clamp'); more.remove(); };
+  };
+  show(vis.length > 1 ? listHTML(g, vis) : detailHTML(vis[0], false));
+}
+
+map.on('load', () => {
+  buildPanel(); refresh(); applyLayers();
+  map.on('click', 'pts', e => { const f = e.features[0]; openGroup(f.properties.g, f.geometry.coordinates); });
+  map.on('mouseenter', 'pts', () => map.getCanvas().style.cursor = 'pointer');
+  map.on('mouseleave', 'pts', () => map.getCanvas().style.cursor = '');
+  map.once('idle', () => document.body.dataset.ready = '1');
+});
+</script>
+</body>
+</html>
