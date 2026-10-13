@@ -91,6 +91,10 @@
   .li .n { flex: 1; min-width: 0; } .li .n b { display: block; font-size: 13.5px; } .li .n span { font-size: 11.5px; color: #888; }
   .th { width: 44px; height: 44px; object-fit: cover; border-radius: 5px; flex: none; background: #eee; }
   .arrow { color: #1a5fb4; }
+  .ringpop { width: auto; min-width: 170px; max-width: 270px; }
+  .ringpop .rt { font-size: 12px; color: #777; } .ringpop .rv { font-size: 18px; font-weight: 700; margin: 1px 0; }
+  .ringpop .rn { font-size: 13px; margin-bottom: 4px; } .ringpop .rsum { font-weight: 700; margin: 2px 0 4px; }
+  .ringpop td:first-child { color: #333; width: auto; white-space: normal; padding-right: 10px; } .ringpop td:last-child { white-space: nowrap; text-align: right; }
 
   @media (max-width: 600px) {
     .panel { width: auto; right: 12px; padding: 10px 12px; max-height: 60vh; }
@@ -387,7 +391,7 @@ function updateMap() {
       const vals = vis.map(a => a[key]).filter(v => v != null && v > 0);
       if (vals.length) {
         const v = state.ring === 'size' ? Math.max(...vals) : vals.reduce((s, x) => s + x, 0);
-        rf.push({ type: 'Feature', properties: { r: RING_R[state.ring](v) + 3, c: RING_COLOR[state.ring], v }, geometry: { type: 'Point', coordinates: [g.lng, g.lat] } });
+        rf.push({ type: 'Feature', properties: { r: RING_R[state.ring](v) + 3, c: RING_COLOR[state.ring], v, g: g.id }, geometry: { type: 'Point', coordinates: [g.lng, g.lat] } });
       }
     }
   });
@@ -439,10 +443,32 @@ function openGroup(gid, lngLat) {
   show(vis.length > 1 ? listHTML(g, vis) : detailHTML(vis[0], false));
 }
 
+// ---- 규격·가액 원 클릭: 실제 값 보여주기 ----
+// 규격 = 규격 재코딩값(가장 긴 변, m) / 가액 = 원자료 작품가액. 같은 위치에 여러 점이면 작품별 값과 원 크기 기준(규격: 가장 큰 값, 가액: 합계)
+const fmtPrice = v => v >= 100 ? `${+(v / 100).toFixed(2)}억 원` : `${Math.round(v * 100).toLocaleString()}만 원`;
+function ringHTML(gid) {
+  const vis = GROUPS[gid].items.filter(a => pass(a, -1)), size = state.ring === 'size';
+  const chk = a => ({ '추정': ' <span class="b est">추정</span>', '재조사 필요': ' <span class="b re">재조사 필요</span>' }[a.sizeChk] || '');
+  const val = a => size ? (a.sizeV ? `${esc(a.size)}${chk(a)}` : '미상') : esc(a.price);
+  const title = size ? '작품 규격 (가장 긴 변)' : '작품가액';
+  if (vis.length === 1) return `<div class="pop ringpop"><div class="rt">${title}</div><div class="rv">${val(vis[0])}</div>
+    <div class="rn">${esc(vis[0].name)}</div><button class="more" data-open="1">작품 정보 보기 ›</button></div>`;
+  const vals = vis.map(a => size ? a.sizeV : a.priceV).filter(v => v != null && v > 0);
+  const total = size ? `원 크기 기준: 가장 큰 값 ${+(Math.max(...vals) / 100).toFixed(2)}m` : `원 크기 기준: 합계 ${fmtPrice(vals.reduce((t, x) => t + x, 0))}`;
+  return `<div class="pop ringpop"><div class="rt">${title} · 이 위치의 작품 ${vis.length}점</div><div class="rsum">${total}</div>
+    <table>${vis.map(a => `<tr><td>${esc(a.name)}</td><td>${val(a)}</td></tr>`).join('')}</table>
+    <button class="more" data-open="1">작품 정보 보기 ›</button></div>`;
+}
+function openRing(gid, lngLat) {
+  if (popup) popup.remove();
+  popup = new maplibregl.Popup({ maxWidth: '300px', offset: 6 }).setLngLat(lngLat).setHTML(ringHTML(gid)).addTo(map);
+  popup.getElement().querySelector('[data-open]').onclick = () => openGroup(gid, [GROUPS[gid].lng, GROUPS[gid].lat]);
+}
+
 // '과천시' 이름: 늘 표시 (켜고 끄지 않음). 글꼴은 속성 박스와 같은 Noto Sans KR — 글꼴을 받은 뒤 그림
 const GW_LABEL = { id: 'gw-lab', type: 'symbol', source: 'gwlab',
   layout: { 'text-field': ['get', 't'], 'text-font': ['Noto Sans Bold'], 'text-allow-overlap': true, 'text-ignore-placement': true,
-    'text-size': ['interpolate', ['linear'], ['zoom'], 9.5, 13, 10, 17, 10.5, 23, 11, 32, 12, 42, 14, 54] },   // 지도 축척에 맞춰 커지게 → 서울 전체 화면에서도 과천 경계 안에 들어감
+    'text-size': 15 },   // 속성 박스 제목(서울시 공공미술품 현황)과 같은 크기
   paint: { 'text-color': '#555', 'text-halo-color': '#fff', 'text-halo-width': 2.5 } };
 const addGwLabel = () => { if (!map.getLayer('gw-lab')) map.addLayer(GW_LABEL, 'ring'); };
 
@@ -450,6 +476,13 @@ map.on('load', () => {
   Promise.race([document.fonts.load('700 20px "Noto Sans KR"', '과천시'), new Promise(r => setTimeout(r, 3000))]).then(addGwLabel, addGwLabel);
   buildPanel(); refresh(); applyLayers();
   map.on('click', 'pts', e => { const f = e.features[0]; openGroup(f.properties.g, f.geometry.coordinates); });
+  map.on('click', 'ring', e => {   // 점을 누른 경우는 점 정보창이 우선
+    if (map.queryRenderedFeatures(e.point, { layers: ['pts', 'pts-halo'] }).length) return;
+    const f = e.features.slice().sort((a, b) => a.properties.v - b.properties.v)[0];   // 겹치면 작은 원(위에 그려진 원)
+    openRing(f.properties.g, e.lngLat);
+  });
+  map.on('mouseenter', 'ring', () => map.getCanvas().style.cursor = 'pointer');
+  map.on('mouseleave', 'ring', () => map.getCanvas().style.cursor = '');
   map.on('mouseenter', 'pts', () => map.getCanvas().style.cursor = 'pointer');
   map.on('mouseleave', 'pts', () => map.getCanvas().style.cursor = '');
   map.once('idle', () => document.body.dataset.ready = '1');
