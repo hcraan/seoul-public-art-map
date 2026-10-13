@@ -54,6 +54,11 @@
   .ring { border-radius: 50%; border: 1px solid rgba(0,0,0,.35); background: rgba(0,0,0,.08); box-sizing: border-box; }
   .mark { display: flex; flex: none; align-items: center; }
   .mark:empty { display: none; }
+  .mode { display: inline-flex; border: 1px solid #c9ced6; border-radius: 6px; overflow: hidden; margin-left: auto; flex: none; }
+  .mode button { border: none; background: #fff; color: #444; font: inherit; font-size: 11.5px; padding: 3px 8px; cursor: pointer; }
+  .mode button + button { border-left: 1px solid #c9ced6; }
+  .mode button.on { background: #e8eef7; color: #1a3f73; font-weight: 700; }
+  .row.off { opacity: .4; pointer-events: none; }
   .note { font-size: 11px; color: #999; margin: 2px 0 0 22px; line-height: 1.4; }
   .toggle-btn { display: none; }
   .foot { font-size: 11px; color: #888; line-height: 1.5; border-top: 1px solid #e3e3e3; padding-top: 7px; margin-top: 6px; }
@@ -105,15 +110,16 @@
     <div class="showing" id="showing"></div>
     <div id="secs"></div>
     <div class="sec layer" id="layerSec">
-      <div class="sec-head"><button class="fold" title="펼치기/접기">▼</button><h2>99.지도 레이어</h2></div>
+      <div class="sec-head"><button class="fold" title="펼치기/접기">▼</button><h2>99.지도 레이어</h2><div class="mode" id="baseSwitch" title="배경지도"><button data-b="vec" class="on">주제도</button><button data-b="osm">일반 지도</button><button data-b="sat">위성사진</button></div></div>
       <div class="sec-body">
         <label class="row"><input type="checkbox" data-layer="dong" checked><span>행정동 경계선</span></label>
-        <label class="row"><input type="checkbox" data-layer="road" checked><span>도로망·한강</span></label>
-        <label class="row"><input type="checkbox" data-layer="bld" checked><span>건물·공원</span></label>
-        <div class="note">도로·건물·공원: OpenStreetMap 기준 · 최신 건물 정보는 빠져 있을 수 있음</div>
+        <label class="row vecopt"><input type="checkbox" data-layer="road" checked><span>도로망·한강</span></label>
+        <label class="row vecopt"><input type="checkbox" data-layer="bld" checked><span>건물·공원</span></label>
+        <label class="row satopt off"><input type="checkbox" data-layer="veil" checked><span>행정동 면 (배경지도 흐리게)</span></label>
+        <div class="note">도로·건물·공원: OpenStreetMap 기준 · 최신 건물 정보는 빠져 있을 수 있음 · 일반 지도: OpenStreetMap · 위성사진: Esri World Imagery</div>
       </div>
     </div>
-    <div class="foot">자료: 서울시 공공미술 관리 현황(원자료 362건) 중 지도 표시 219건 · 횡성 수장고 보관 작품과 자치구 관리 작품(서울시-문체부 공공미술 프로젝트 제외)은 표시하지 않음 · 굵은 테두리 점 = 같은 위치에 작품 여러 점(숫자 = 개수) · 규격은 2026-10-13 재조사값(정보창에 추정·재조사 필요 표시)<br>배경지도 © OpenStreetMap contributors · OpenFreeMap</div>
+    <div class="foot">자료: 서울시 공공미술 관리 현황(원자료 362건) 중 지도 표시 219건 · 횡성 수장고 보관 작품과 자치구 관리 작품(서울시-문체부 공공미술 프로젝트 제외)은 표시하지 않음 · 굵은 테두리 점 = 같은 위치에 작품 여러 점(숫자 = 개수) · 규격은 2026-10-13 재조사값(정보창에 추정·재조사 필요 표시)<br>배경지도 © OpenStreetMap contributors · OpenFreeMap · 위성사진 © Esri, Maxar, Earthstar Geographics</div>
   </div>
 </div>
 
@@ -152,7 +158,7 @@ const RING_R = { size: v => Math.sqrt(v) * 0.42, price: v => Math.sqrt(v) * 1.35
 const state = {
   color: 0, ring: 'none',
   sel: CATS.map(c => new Set(c.items.map(i => i[0]))),
-  layers: { dong: true, road: true, bld: true },
+  layers: { dong: true, road: true, bld: true, veil: true }, base: 'vec',
 };
 const pass = (a, skip) => CATS.every((c, j) => j === skip || state.sel[j].has(a.f[j]));
 const colorOf = a => CATS[state.color].items.find(i => i[0] === a.f[state.color])[1];
@@ -192,6 +198,7 @@ function buildPanel() {
       const v = CATS[j].items[+row.dataset.k][0]; e.target.checked ? state.sel[j].add(v) : state.sel[j].delete(v); refresh(); });
   });
   document.querySelectorAll('[data-layer]').forEach(cb => cb.onchange = () => { state.layers[cb.dataset.layer] = cb.checked; applyLayers(); });
+  document.querySelectorAll('#baseSwitch button').forEach(b => b.onclick = () => { state.base = b.dataset.b; applyLayers(); });
   const panel = document.getElementById('panel'), tb = document.getElementById('toggleBtn');
   if (window.innerWidth <= 600) { panel.classList.add('collapsed'); tb.textContent = '펼치기'; }
   tb.onclick = () => { panel.classList.toggle('collapsed'); tb.textContent = panel.classList.contains('collapsed') ? '펼치기' : '접기'; };
@@ -244,11 +251,18 @@ const map = new maplibregl.Map({
     glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
     sources: {
       omt: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },
+      // 배경지도 두 가지 더: 일반 지도(OpenStreetMap) / 위성사진(Esri World Imagery) — 서울형 마을호텔 후보지 분석 지도와 같음
+      osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, maxzoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' },
+      sat: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19,
+        attribution: '위성사진 &copy; Esri, Maxar, Earthstar Geographics' },
       dong: { type: 'geojson', data: DONGS }, mask: { type: 'geojson', data: mask }, outline: { type: 'geojson', data: outline },
       ring: { type: 'geojson', data: empty }, pts: { type: 'geojson', data: empty },
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#ffffff' } },
+      { id: 'base-osm', type: 'raster', source: 'osm', layout: { visibility: 'none' } },
+      { id: 'base-sat', type: 'raster', source: 'sat', layout: { visibility: 'none' } },
       { id: 'dong-fill', type: 'fill', source: 'dong', paint: { 'fill-color': '#f1f0ec' } },
       { id: 'park', type: 'fill', source: 'omt', 'source-layer': 'park', paint: { 'fill-color': '#cfe5c0', 'fill-opacity': 0.95 } },
       { id: 'green', type: 'fill', source: 'omt', 'source-layer': 'landcover', filter: ['in', ['get', 'class'], ['literal', ['grass', 'wood']]],
@@ -268,6 +282,7 @@ const map = new maplibregl.Map({
         filter: ['in', ['get', 'class'], ['literal', ROAD_MAJOR]], layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: { 'line-color': ['match', ['get', 'class'], ['motorway', 'trunk'], '#a9a49a', '#bdb8ad'],
           'line-width': ['interpolate', ['linear'], ['zoom'], 10, ['match', ['get', 'class'], ['motorway', 'trunk'], 1.2, 0.6], 16, ['match', ['get', 'class'], ['motorway', 'trunk'], 7, 5], 18, 14] } },
+      { id: 'veil', type: 'fill', source: 'dong', layout: { visibility: 'none' }, paint: { 'fill-color': '#f7f6f3', 'fill-opacity': 0.45 } },
       { id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': '#ffffff' } },
       { id: 'dong-line', type: 'line', source: 'dong', paint: { 'line-color': '#a8a8a8', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.4, 15, 1] } },
       { id: 'seoul-line', type: 'line', source: 'outline', paint: { 'line-color': '#555', 'line-width': 1.6 } },
@@ -291,8 +306,20 @@ const map = new maplibregl.Map({
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
 
+// 배경지도: 주제도(OpenFreeMap 색칠) / 일반 지도(OpenStreetMap) / 위성사진(Esri)
+// 일반 지도·위성사진일 때: 주제도 색칠(베이지 면·도로·건물·공원) 끄기, 서울 밖은 흰 면 대신 반투명하게 흐리게
 function applyLayers() {
-  Object.entries(LAYER_GROUPS).forEach(([k, ids]) => ids.forEach(id => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', state.layers[k] ? 'visible' : 'none')));
+  const vec = state.base === 'vec', vis = on => on ? 'visible' : 'none';
+  Object.entries(LAYER_GROUPS).forEach(([k, ids]) => ids.forEach(id => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', vis(state.layers[k] && (vec || k === 'dong')))));
+  map.setLayoutProperty('dong-fill', 'visibility', vis(vec));
+  map.setLayoutProperty('base-osm', 'visibility', vis(state.base === 'osm'));
+  map.setLayoutProperty('base-sat', 'visibility', vis(state.base === 'sat'));
+  map.setLayoutProperty('veil', 'visibility', vis(!vec && state.layers.veil));
+  map.setPaintProperty('mask', 'fill-color', vec ? '#ffffff' : '#c4c3be');
+  map.setPaintProperty('mask', 'fill-opacity', vec ? 1 : 0.6);
+  document.querySelectorAll('.vecopt').forEach(r => r.classList.toggle('off', !vec));
+  document.querySelectorAll('.satopt').forEach(r => r.classList.toggle('off', vec));
+  document.querySelectorAll('#baseSwitch button').forEach(b => b.classList.toggle('on', b.dataset.b === state.base));
 }
 
 function updateMap() {
