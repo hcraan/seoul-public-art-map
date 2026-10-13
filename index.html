@@ -59,6 +59,9 @@
   .mode button + button { border-left: 1px solid #c9ced6; }
   .mode button.on { background: #e8eef7; color: #1a3f73; font-weight: 700; }
   .row.off { opacity: .4; pointer-events: none; }
+  .row.subrow { padding-left: 22px; }
+  .row .plinks { font-size: 11.5px; color: #999; white-space: nowrap; margin-left: 4px; }
+  .row .plinks button { border: none; background: none; color: #1a5fb4; cursor: pointer; padding: 0 2px; font-size: 11.5px; font-family: inherit; }
   .note { font-size: 11px; color: #999; margin: 2px 0 0 22px; line-height: 1.4; }
   .toggle-btn { display: none; }
   .foot { font-size: 11px; color: #888; line-height: 1.5; border-top: 1px solid #e3e3e3; padding-top: 7px; margin-top: 6px; }
@@ -150,6 +153,22 @@ const CATS = [
     ['0원 (기증·무상 등)', null], ['5천만 원 이하', 30], ['5천만~1억 원', 80], ['1억~3억 원', 200], ['3억 원 이상', 600], ['미상', null] ] },
 ];
 const COLOR_CATS = [0, 1, 2, 3, 4, 5, 6];
+// 관리기관 하위 분류 (원자료 E열=2단계, F열=3단계 기준)
+// 서울시: 디자인정책관 / 그 외 본청(서울시 조직도 본청) / 사업소(서울시 '본부·사업소' 조직도에 있는 기관)
+// 투자출연기관: 세종문화회관 / 서울시설공단은 F열로 4개
+const SUBS = {
+  '서울시': ['디자인정책관', '그 외 본청', '사업소'],
+  '투자출연기관': ['세종문화회관', '도로관리처(시설공단)', '어린이대공원(시설공단)', '월드컵경기장운영처(시설공단)', '추모시설운영처(시설공단)'],
+};
+const SAEOPSO = ['미래한강본부', '도시기반시설본부', '아리수본부', '서울아리수본부', '서울대공원', '동부공원여가센터', '서부공원여가센터', '중부공원여가센터', '북부공원여가센터', '체육시설관리사업소'];
+const FMC = { '도로관리처': '도로관리처(시설공단)', '서울어린이대공원': '어린이대공원(시설공단)', '서울월드컵경기장운영처': '월드컵경기장운영처(시설공단)', '추모시설운영처': '추모시설운영처(시설공단)' };
+function subOf(a) {
+  const [top, l2, l3] = (a.org || '').split(' › ').map(s => s.trim());
+  if (top === '서울시') return l2 === '디자인정책관' ? '디자인정책관' : SAEOPSO.includes(l2) ? '사업소' : '그 외 본청';
+  if (top === '투자출연기관') return l2 === '세종문화회관' ? '세종문화회관' : FMC[l3] || null;
+  return null;
+}
+ART.forEach(a => a.sub = subOf(a));
 const RINGS = [['none', '없음'], ['size', '작품 규격'], ['price', '작품가액']];
 const RING_COLOR = { size: '#b0703c', price: '#7a5c99' };
 // 원 반지름(px, 줌 12 기준) — 면적이 값에 비례
@@ -158,9 +177,14 @@ const RING_R = { size: v => Math.sqrt(v) * 0.42, price: v => Math.sqrt(v) * 1.35
 const state = {
   color: 0, ring: 'none',
   sel: CATS.map(c => new Set(c.items.map(i => i[0]))),
+  sub: new Set(Object.values(SUBS).flat()),   // 켜진 하위 분류
   layers: { dong: true, road: true, bld: true, veil: true }, base: 'vec',
 };
-const pass = (a, skip) => CATS.every((c, j) => j === skip || state.sel[j].has(a.f[j]));
+const pass = (a, skip) => CATS.every((c, j) => j === skip || (state.sel[j].has(a.f[j]) && (j !== 0 || !a.sub || state.sub.has(a.sub))));
+const passSub = a => !a.sub || state.sub.has(a.sub);   // 관리기관 칸 자체를 셀 때 하위 분류만 확인
+// 상위(서울시·투자출연기관)를 켜고 끄면 하위도 모두 같이, 하위가 하나라도 켜지면 상위도 켜짐
+function setParent(v, on) { (SUBS[v] || []).forEach(s => on ? state.sub.add(s) : state.sub.delete(s)); on ? state.sel[0].add(v) : state.sel[0].delete(v); }
+function syncParents() { Object.entries(SUBS).forEach(([v, subs]) => subs.some(s => state.sub.has(s)) ? state.sel[0].add(v) : state.sel[0].delete(v)); }
 const colorOf = a => CATS[state.color].items.find(i => i[0] === a.f[state.color])[1];
 
 // 같은 좌표 묶기
@@ -181,7 +205,8 @@ function buildPanel() {
         <span class="links"><button data-a="1">전체</button>·<button data-a="0">해제</button></span></div>
       <div class="sec-body">${c.note ? `<div class="note" style="margin:0 0 2px 2px">${c.note}</div>` : ''}${c.items.map((it, k) => `
         <label class="row${it[2] ? ' two' : ''}" data-k="${k}"><input type="checkbox" checked>
-          <span class="mark"></span><span class="lab">${esc(it[0])}${it[2] ? `<span class="sub-note">${esc(it[2])}</span>` : ''}</span><span class="cnt"></span></label>`).join('')}
+          <span class="mark"></span><span class="lab">${esc(it[0])}${it[2] ? `<span class="sub-note">${esc(it[2])}</span>` : ''}</span>${j === 0 && SUBS[it[0]] ? `<span class="plinks"><button data-p="1">전체</button>·<button data-p="0">해제</button></span>` : ''}<span class="cnt"></span></label>${j === 0 && SUBS[it[0]] ? SUBS[it[0]].map(sv => `
+        <label class="row subrow" data-sub="${esc(sv)}"><input type="checkbox" checked><span class="lab">${esc(sv)}</span><span class="cnt"></span></label>`).join('') : ''}`).join('')}
       </div></div>`).join('');
 
   document.querySelectorAll('#colorChips .chip').forEach(b => b.onclick = () => { state.color = +b.dataset.c; refresh(); });
@@ -193,9 +218,19 @@ function buildPanel() {
   document.querySelectorAll('#secs .sec').forEach(sec => {
     const j = +sec.dataset.j;
     sec.querySelectorAll('.links button').forEach(b => b.onclick = () => {
-      state.sel[j] = b.dataset.a === '1' ? new Set(CATS[j].items.map(i => i[0])) : new Set(); refresh(); });
-    sec.querySelectorAll('.row').forEach(row => row.querySelector('input').onchange = e => {
-      const v = CATS[j].items[+row.dataset.k][0]; e.target.checked ? state.sel[j].add(v) : state.sel[j].delete(v); refresh(); });
+      const on = b.dataset.a === '1';
+      state.sel[j] = on ? new Set(CATS[j].items.map(i => i[0])) : new Set();
+      if (j === 0) state.sub = on ? new Set(Object.values(SUBS).flat()) : new Set();
+      refresh(); });
+    sec.querySelectorAll('.row[data-k]').forEach(row => row.querySelector('input').onchange = e => {
+      const v = CATS[j].items[+row.dataset.k][0];
+      if (j === 0) setParent(v, e.target.checked); else e.target.checked ? state.sel[j].add(v) : state.sel[j].delete(v);
+      refresh(); });
+    sec.querySelectorAll('.plinks button').forEach(b => b.onclick = e => {   // 서울시·투자출연기관 오른쪽 전체/해제
+      e.preventDefault(); e.stopPropagation();
+      setParent(CATS[0].items[+b.closest('.row').dataset.k][0], b.dataset.p === '1'); refresh(); });
+    sec.querySelectorAll('.row[data-sub]').forEach(row => row.querySelector('input').onchange = e => {
+      e.target.checked ? state.sub.add(row.dataset.sub) : state.sub.delete(row.dataset.sub); syncParents(); refresh(); });
   });
   document.querySelectorAll('[data-layer]').forEach(cb => cb.onchange = () => { state.layers[cb.dataset.layer] = cb.checked; applyLayers(); });
   document.querySelectorAll('#baseSwitch button').forEach(b => b.onclick = () => { state.base = b.dataset.b; applyLayers(); });
@@ -219,12 +254,21 @@ function refresh() {
   document.querySelectorAll('#ringChips .chip').forEach(b => b.classList.toggle('on', b.dataset.r === state.ring));
   CATS.forEach((c, j) => {
     const sec = document.querySelector(`#secs .sec[data-j="${j}"]`);
-    const n = state.sel[j].size;
-    sec.querySelector('.sum').textContent = n === c.items.length ? '(전체)' : n === 0 ? '(꺼짐)' : `(${n}개 선택)`;
-    sec.querySelectorAll('.row').forEach(row => {
+    const allSubs = Object.values(SUBS).flat();
+    const full = state.sel[j].size === c.items.length && (j !== 0 || state.sub.size === allSubs.length);
+    const n = j === 0 ? c.items.filter(i => !SUBS[i[0]] && state.sel[0].has(i[0])).length + state.sub.size : state.sel[j].size;
+    sec.querySelector('.sum').textContent = full ? '(전체)' : n === 0 ? '(꺼짐)' : `(${n}개 선택)`;
+    sec.querySelectorAll('.row[data-sub]').forEach(row => {
+      const sv = row.dataset.sub, cnt = ART.filter(a => a.sub === sv && pass(a, 0)).length;
+      row.querySelector('input').checked = state.sub.has(sv);
+      row.querySelector('.cnt').textContent = cnt + '점'; row.classList.toggle('zero', cnt === 0);
+    });
+    sec.querySelectorAll('.row[data-k]').forEach(row => {
       const it = c.items[+row.dataset.k];
       const cnt = ART.filter(a => a.f[j] === it[0] && pass(a, j)).length;
-      row.querySelector('input').checked = state.sel[j].has(it[0]);
+      const inp = row.querySelector('input');
+      inp.checked = state.sel[j].has(it[0]);
+      if (j === 0 && SUBS[it[0]]) { const k = SUBS[it[0]].filter(s => state.sub.has(s)).length; inp.indeterminate = k > 0 && k < SUBS[it[0]].length; }
       row.querySelector('.cnt').textContent = cnt + '점';
       row.classList.toggle('zero', cnt === 0);
       row.querySelector('.mark').outerHTML = `<span class="mark">${markHTML(c, j, it)}</span>`;
