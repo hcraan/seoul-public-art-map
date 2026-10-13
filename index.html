@@ -69,7 +69,7 @@
   .badges { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
   .b { font-size: 11px; padding: 1px 7px; border-radius: 4px; background: #eef1f5; color: #333; }
   .b.ok { background: #e3f1e6; color: #1d6b35; } .b.no { background: #fde8e6; color: #b3261e; }
-  .b.na { background: #f0f0f0; color: #888; } .b.warn { background: #fff1dc; color: #9a5300; } .b.soon { background: #fff7cf; color: #7a6000; }
+  .b.na { background: #f0f0f0; color: #888; } .b.est { background: #fff1dc; color: #9a5300; } .b.re { background: #fde8e6; color: #b3261e; } .b.warn { background: #fff1dc; color: #9a5300; } .b.soon { background: #fff7cf; color: #7a6000; }
   .pop table { border-collapse: collapse; width: 100%; } .pop td { padding: 2px 0; vertical-align: top; }
   .pop td:first-child { color: #777; width: 64px; white-space: nowrap; }
   .raw { font-size: 11px; color: #999; }
@@ -113,7 +113,7 @@
         <div class="note">도로·건물·공원: OpenStreetMap 기준 · 최신 건물 정보는 빠져 있을 수 있음</div>
       </div>
     </div>
-    <div class="foot">자료: 서울시 공공미술 관리 현황(원자료 362건) 중 지도 표시 219건 · 횡성 수장고 보관 작품과 자치구 관리 작품(서울시-문체부 공공미술 프로젝트 제외)은 표시하지 않음 · 굵은 테두리 점 = 같은 위치에 작품 여러 점(숫자 = 개수)<br>배경지도 © OpenStreetMap contributors · OpenFreeMap</div>
+    <div class="foot">자료: 서울시 공공미술 관리 현황(원자료 362건) 중 지도 표시 219건 · 횡성 수장고 보관 작품과 자치구 관리 작품(서울시-문체부 공공미술 프로젝트 제외)은 표시하지 않음 · 굵은 테두리 점 = 같은 위치에 작품 여러 점(숫자 = 개수) · 규격은 2026-10-13 재조사값(정보창에 추정·재조사 필요 표시)<br>배경지도 © OpenStreetMap contributors · OpenFreeMap</div>
   </div>
 </div>
 
@@ -138,7 +138,7 @@ const CATS = [
   { t: '7.생애주기 경과별', chip: '생애주기 경과', items: [
     ['기간 지남', '#c0392b', '설치년도 + 생애주기가 2025년 이전'], ['곧 만료 (2026~27년)', '#f0a020'], ['기간 남음', '#2e9e5b'],
     ['해당 없음 (영구)', '#7b8794'], ['정보 없음', GREY] ] },
-  { t: '8.작품 규격별', ring: 'size', note: '가장 긴 변 기준', items: [
+  { t: '8.작품 규격별', ring: 'size', note: '가장 긴 변 기준 · 2026-10-13 재조사값', items: [
     ['2m 미만', 150], ['2~5m', 350], ['5~10m', 750], ['10m 이상', 2000], ['미상', null] ] },
   { t: '9.작품가액별', ring: 'price', items: [
     ['0원 (기증·무상 등)', null], ['5천만 원 이하', 30], ['5천만~1억 원', 80], ['1억~3억 원', 200], ['3억 원 이상', 600], ['미상', null] ] },
@@ -329,8 +329,9 @@ function badgeHTML(a) {
 function detailHTML(a, back) {
   const row = (k, v) => v ? `<tr><td>${k}</td><td>${v}</td></tr>` : '';
   const sizeRaw = [a.sizeRaw && `원문 ${esc(a.sizeRaw)}`, a.comp && `구성 ${esc(a.comp)}`].filter(Boolean).join(', ');
-  const size = a.size === '미상' ? `미상${a.sizeRaw ? ` <span class="raw">(원문 "${esc(a.sizeRaw)}")</span>` : ''}`
-    : `가장 긴 변 ${a.size}${sizeRaw ? ` <span class="raw">(${sizeRaw})</span>` : ''}${a.sizeNote ? `<br><span class="raw">※ ${esc(a.sizeNote)}</span>` : ''}`;
+  const chk = { '추정': '<span class="b est">추정</span>', '재조사 필요': '<span class="b re">재조사 필요</span>' }[a.sizeChk] || '';
+  const size = a.size === '미상' ? `미상 ${chk}${a.sizeRaw ? ` <span class="raw">(원문 "${esc(a.sizeRaw)}")</span>` : ''}`
+    : `${a.dims ? esc(a.dims) + '<br>' : ''}가장 긴 변 ${a.size} ${chk}${sizeRaw ? `<br><span class="raw">(${sizeRaw})</span>` : ''}${a.sizeNote ? `<br><span class="raw">※ ${esc(a.sizeNote)}</span>` : ''}`;
   const price = esc(a.price) + (a.priceRaw ? ` <span class="raw">(원문 "${esc(a.priceRaw)}")</span>` : '') + (a.priceNote && !a.priceNote.startsWith('사업 전체') && a.priceNote !== '원문 표기 정리' ? `<br><span class="raw">※ ${esc(a.priceNote)}</span>` : '');
   return `<div class="pop">${back ? '<button class="back" data-back="1">‹ 이 위치의 작품 목록</button>' : ''}
     ${a.photo ? `<div class="ph"><img src="photos/${a.photo}" alt=""></div>` : '<div class="ph none">사진 없음</div>'}
