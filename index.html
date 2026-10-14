@@ -34,6 +34,7 @@
   .sres .it b { font-weight: 700; color: #1a3f73; }
   .sres .nm { flex: 1; min-width: 0; font-size: 13px; } .sres .meta { display: block; font-size: 11px; color: #888; }
   .sres .hid { font-size: 10.5px; color: #b3261e; white-space: nowrap; }
+  .hidnote { font-size: 11.5px; color: #b3261e; background: #fde8e6; border-radius: 5px; padding: 3px 8px; margin: 0 18px 6px 0; }
   .sres .none { padding: 8px 10px; color: #999; font-size: 12px; }
   .lbl { font-size: 12px; color: #555; font-weight: 700; margin: 2px 0 5px; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 10px; }
@@ -125,7 +126,7 @@
   <button class="toggle-btn" id="toggleBtn">접기</button>
   <h1>서울시 공공미술품 현황</h1>
   <div class="search" id="search"><svg class="ico" viewBox="0 0 16 16"><circle cx="7" cy="7" r="5" fill="none" stroke="#888" stroke-width="1.8"/><path d="M11 11l3.5 3.5" stroke="#888" stroke-width="1.8" stroke-linecap="round"/></svg>
-    <input id="q" type="text" placeholder="작품명 검색 (예: 솜사탕코끼리)" autocomplete="off"><button class="clr" id="qclr" title="지우기">×</button>
+    <input id="q" type="text" placeholder="작품명·작가 검색 (예: 솜사탕코끼리, 김경승)" autocomplete="off"><button class="clr" id="qclr" title="지우기">×</button>
     <div class="sres" id="sres"></div></div>
   <div class="body">
     <div class="lbl">점 색깔 기준</div>
@@ -487,8 +488,9 @@ function openRing(gid, lngLat) {
 const norm = t => String(t).toLowerCase().replace(/\s+/g, '');
 function searchHits(q) {
   const k = norm(q); if (!k) return [];
-  const hits = ART.filter(a => norm(a.name).includes(k));
-  return hits.sort((a, b) => (norm(b.name).startsWith(k) - norm(a.name).startsWith(k)) || a.name.localeCompare(b.name, 'ko')).slice(0, 30);
+  // 작품명 또는 작가 이름에 들어 있으면 찾음. 순서: 작품명이 검색어로 시작 > 작품명에 포함 > 작가 이름에만 포함
+  const rank = a => norm(a.name).startsWith(k) ? 0 : norm(a.name).includes(k) ? 1 : norm(a.artist).includes(k) ? 2 : 9;
+  return ART.filter(a => rank(a) < 9).sort((a, b) => (rank(a) - rank(b)) || a.name.localeCompare(b.name, 'ko')).slice(0, 30);
 }
 const hl = (name, q) => { const i = norm(name).indexOf(norm(q)); if (i < 0) return esc(name);
   // 공백을 무시하고 찾은 위치를 원래 글자 위치로 바꿔 굵게
@@ -499,10 +501,17 @@ function goArt(a) {
   if (popup) popup.remove();
   map.flyTo({ center: [a.lng, a.lat], zoom: 17, duration: 1200 });
   map.once('moveend', () => {
-    openGroup(g.id, [g.lng, g.lat]);
     const vis = g.items.filter(x => pass(x, -1));
-    if (vis.length > 1 && vis.includes(a)) popup.getElement().querySelectorAll('.li')[vis.indexOf(a)].click();   // 여러 점이면 그 작품 정보로 바로
-    else if (!vis.includes(a)) popup.setHTML(detailHTML(a, false));   // 필터로 꺼진 작품도 정보는 보여줌
+    if (!vis.includes(a)) {   // 필터로 꺼진 작품: 점은 안 보이지만 정보창은 보여줌
+      const narrow = window.innerWidth <= 600;
+      map.easeTo({ center: [a.lng, a.lat], offset: [narrow ? 0 : 170, Math.round(window.innerHeight * (narrow ? 0.3 : 0.28))], duration: 400 });
+      popup = new maplibregl.Popup({ maxWidth: '340px', offset: 12, anchor: 'bottom', focusAfterOpen: false }).setLngLat([a.lng, a.lat])
+        .setHTML(detailHTML(a, false).replace('<div class="pop">', '<div class="pop"><div class="hidnote">필터로 숨겨진 작품이에요</div>')).addTo(map);
+      const more = popup.getElement().querySelector('.more'); if (more) more.onclick = () => { popup.getElement().querySelector('.desc').classList.remove('clamp'); more.remove(); };
+      return;
+    }
+    openGroup(g.id, [g.lng, g.lat]);
+    if (vis.length > 1) popup.getElement().querySelectorAll('.li')[vis.indexOf(a)].click();   // 여러 점이면 그 작품 정보로 바로
   });
 }
 function initSearch() {
@@ -513,7 +522,7 @@ function initSearch() {
     if (!q.value.trim()) { res.classList.remove('open'); return; }
     hits = searchHits(q.value); act = hits.length ? 0 : -1;
     res.innerHTML = hits.length ? hits.map((a, i) => `<div class="it${i === act ? ' act' : ''}" data-i="${i}"><span class="dot" style="background:${colorOf(a)}"></span>
-      <span class="nm">${hl(a.name, q.value)}<span class="meta">${esc(a.artist)} · ${a.year} · ${esc((a.addr || '').split(' ').slice(0, 3).join(' '))}</span></span>${pass(a, -1) ? '' : '<span class="hid">필터로 숨김</span>'}</div>`).join('')
+      <span class="nm">${hl(a.name, q.value)}<span class="meta">${hl(a.artist, q.value)} · ${a.year} · ${esc((a.addr || '').split(' ').slice(0, 3).join(' '))}</span></span>${pass(a, -1) ? '' : '<span class="hid">필터로 숨김</span>'}</div>`).join('')
       : '<div class="none">일치하는 작품이 없어요</div>';
     res.classList.add('open');
     res.querySelectorAll('.it').forEach(el => el.onmousedown = e => { e.preventDefault(); pick(+el.dataset.i); });
