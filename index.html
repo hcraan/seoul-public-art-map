@@ -20,6 +20,21 @@
     max-height: calc(100vh - 24px); overflow-y: auto; box-sizing: border-box;
     background: rgba(255,255,255,.97); border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.18); padding: 14px 16px; font-size: 13px; }
   .panel h1 { font-size: 15px; font-weight: 700; margin: 0 0 8px; }
+  .search { position: relative; margin: 0 0 10px; }
+  .search input { width: 100%; box-sizing: border-box; border: 1px solid #c9ced6; border-radius: 7px; padding: 6px 28px 6px 30px; font: inherit; font-size: 13px; background: #fff; }
+  .search input:focus { outline: none; border-color: #9fb4d4; box-shadow: 0 0 0 3px #e8eef7; }
+  .search .ico { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; pointer-events: none; }
+  .search .clr { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: none; background: none; color: #999; font-size: 16px; cursor: pointer; padding: 0 4px; display: none; }
+  .search.has .clr { display: block; }
+  .sres { position: absolute; left: 0; right: 0; top: calc(100% + 3px); background: #fff; border: 1px solid #d5dae2; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.15); max-height: 300px; overflow-y: auto; z-index: 5; display: none; }
+  .sres.open { display: block; }
+  .sres .it { display: flex; align-items: center; gap: 7px; padding: 6px 9px; cursor: pointer; border-top: 1px solid #f0f0f0; }
+  .sres .it:first-child { border-top: none; }
+  .sres .it:hover, .sres .it.act { background: #f0f4fa; }
+  .sres .it b { font-weight: 700; color: #1a3f73; }
+  .sres .nm { flex: 1; min-width: 0; font-size: 13px; } .sres .meta { display: block; font-size: 11px; color: #888; }
+  .sres .hid { font-size: 10.5px; color: #b3261e; white-space: nowrap; }
+  .sres .none { padding: 8px 10px; color: #999; font-size: 12px; }
   .lbl { font-size: 12px; color: #555; font-weight: 700; margin: 2px 0 5px; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 10px; }
   .chip { border: 1px solid #c9ced6; border-radius: 6px; background: #fff; color: #444; font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer; }
@@ -109,6 +124,9 @@
 <div class="panel" id="panel">
   <button class="toggle-btn" id="toggleBtn">접기</button>
   <h1>서울시 공공미술품 현황</h1>
+  <div class="search" id="search"><svg class="ico" viewBox="0 0 16 16"><circle cx="7" cy="7" r="5" fill="none" stroke="#888" stroke-width="1.8"/><path d="M11 11l3.5 3.5" stroke="#888" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <input id="q" type="text" placeholder="작품명 검색 (예: 솜사탕코끼리)" autocomplete="off"><button class="clr" id="qclr" title="지우기">×</button>
+    <div class="sres" id="sres"></div></div>
   <div class="body">
     <div class="lbl">점 색깔 기준</div>
     <div class="chips" id="colorChips"></div>
@@ -432,7 +450,7 @@ function openGroup(gid, lngLat) {
   if (popup) popup.remove();
   const narrow = window.innerWidth <= 600;
   map.easeTo({ center: lngLat, offset: [narrow ? 0 : 170, Math.round(window.innerHeight * (narrow ? 0.3 : 0.28))], duration: 400 });
-  popup = new maplibregl.Popup({ maxWidth: '340px', offset: 12, anchor: 'bottom' }).setLngLat(lngLat).addTo(map);
+  popup = new maplibregl.Popup({ maxWidth: '340px', offset: 12, anchor: 'bottom', focusAfterOpen: false }).setLngLat(lngLat).addTo(map);
   const show = html => {
     popup.setHTML(html); popup.setLngLat(lngLat);
     const el = popup.getElement();
@@ -465,6 +483,55 @@ function openRing(gid, lngLat) {
   popup.getElement().querySelector('[data-open]').onclick = () => openGroup(gid, [GROUPS[gid].lng, GROUPS[gid].lat]);
 }
 
+// ---- 작품명 검색: 고르면 그 점으로 줌 17까지 이동하고 작품 정보창을 엶 ----
+const norm = t => String(t).toLowerCase().replace(/\s+/g, '');
+function searchHits(q) {
+  const k = norm(q); if (!k) return [];
+  const hits = ART.filter(a => norm(a.name).includes(k));
+  return hits.sort((a, b) => (norm(b.name).startsWith(k) - norm(a.name).startsWith(k)) || a.name.localeCompare(b.name, 'ko')).slice(0, 30);
+}
+const hl = (name, q) => { const i = norm(name).indexOf(norm(q)); if (i < 0) return esc(name);
+  // 공백을 무시하고 찾은 위치를 원래 글자 위치로 바꿔 굵게
+  let n = 0, s0 = -1, s1 = -1; for (let j = 0; j < name.length; j++) { if (/\s/.test(name[j])) continue; if (n === i) s0 = j; n++; if (n === i + norm(q).length) { s1 = j + 1; break; } }
+  return esc(name.slice(0, s0)) + '<b>' + esc(name.slice(s0, s1)) + '</b>' + esc(name.slice(s1)); };
+function goArt(a) {
+  const g = GROUPS.find(g => g.items.includes(a));
+  if (popup) popup.remove();
+  map.flyTo({ center: [a.lng, a.lat], zoom: 17, duration: 1200 });
+  map.once('moveend', () => {
+    openGroup(g.id, [g.lng, g.lat]);
+    const vis = g.items.filter(x => pass(x, -1));
+    if (vis.length > 1 && vis.includes(a)) popup.getElement().querySelectorAll('.li')[vis.indexOf(a)].click();   // 여러 점이면 그 작품 정보로 바로
+    else if (!vis.includes(a)) popup.setHTML(detailHTML(a, false));   // 필터로 꺼진 작품도 정보는 보여줌
+  });
+}
+function initSearch() {
+  const box = document.getElementById('search'), q = document.getElementById('q'), res = document.getElementById('sres');
+  let hits = [], act = -1;
+  const draw = () => {
+    box.classList.toggle('has', !!q.value);
+    if (!q.value.trim()) { res.classList.remove('open'); return; }
+    hits = searchHits(q.value); act = hits.length ? 0 : -1;
+    res.innerHTML = hits.length ? hits.map((a, i) => `<div class="it${i === act ? ' act' : ''}" data-i="${i}"><span class="dot" style="background:${colorOf(a)}"></span>
+      <span class="nm">${hl(a.name, q.value)}<span class="meta">${esc(a.artist)} · ${a.year} · ${esc((a.addr || '').split(' ').slice(0, 3).join(' '))}</span></span>${pass(a, -1) ? '' : '<span class="hid">필터로 숨김</span>'}</div>`).join('')
+      : '<div class="none">일치하는 작품이 없어요</div>';
+    res.classList.add('open');
+    res.querySelectorAll('.it').forEach(el => el.onmousedown = e => { e.preventDefault(); pick(+el.dataset.i); });
+  };
+  const pick = i => { const a = hits[i]; if (!a) return; q.value = a.name; res.classList.remove('open'); q.blur(); goArt(a); };
+  q.addEventListener('input', draw);
+  q.addEventListener('focus', () => q.value && draw());
+  q.addEventListener('blur', () => setTimeout(() => res.classList.remove('open'), 150));
+  q.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (!hits.length) return;
+      act = (act + (e.key === 'ArrowDown' ? 1 : hits.length - 1)) % hits.length;
+      res.querySelectorAll('.it').forEach((el, i) => el.classList.toggle('act', i === act)); res.querySelector('.act').scrollIntoView({ block: 'nearest' }); }
+    else if (e.key === 'Enter') { e.preventDefault(); pick(act); }
+    else if (e.key === 'Escape') { res.classList.remove('open'); }
+  });
+  document.getElementById('qclr').onclick = () => { q.value = ''; draw(); q.focus(); };
+}
+
 // '과천시' 이름: 늘 표시 (켜고 끄지 않음). 글꼴은 속성 박스와 같은 Noto Sans KR — 글꼴을 받은 뒤 그림
 const GW_LABEL = { id: 'gw-lab', type: 'symbol', source: 'gwlab',
   layout: { 'text-field': ['get', 't'], 'text-font': ['Noto Sans Bold'], 'text-allow-overlap': true, 'text-ignore-placement': true,
@@ -474,7 +541,7 @@ const addGwLabel = () => { if (!map.getLayer('gw-lab')) map.addLayer(GW_LABEL, '
 
 map.on('load', () => {
   Promise.race([document.fonts.load('700 20px "Noto Sans KR"', '과천시'), new Promise(r => setTimeout(r, 3000))]).then(addGwLabel, addGwLabel);
-  buildPanel(); refresh(); applyLayers();
+  buildPanel(); initSearch(); refresh(); applyLayers();
   map.on('click', 'pts', e => { const f = e.features[0]; openGroup(f.properties.g, f.geometry.coordinates); });
   map.on('click', 'ring', e => {   // 점을 누른 경우는 점 정보창이 우선
     if (map.queryRenderedFeatures(e.point, { layers: ['pts', 'pts-halo'] }).length) return;
