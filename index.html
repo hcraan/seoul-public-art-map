@@ -76,6 +76,10 @@
   .mode button.on { background: #e8eef7; color: #1a3f73; font-weight: 700; }
   .row.off { opacity: .4; pointer-events: none; }
   .row.subrow { padding-left: 22px; }
+  .row.prow { cursor: default; } .row.prow .lab { cursor: pointer; }
+  .fold.sfold { width: 16px; height: 16px; line-height: 16px; font-size: 9px; border-radius: 4px; margin-left: -1px; }
+  .row.prow.shut .sfold { transform: rotate(-90deg); }
+  .row.prow.shut + .subs { display: none; }
   .row .plinks { font-size: 11.5px; color: #999; white-space: nowrap; margin-left: 4px; }
   .row .plinks button { border: none; background: none; color: #1a5fb4; cursor: pointer; padding: 0 2px; font-size: 11.5px; font-family: inherit; }
   .note { font-size: 11px; color: #999; margin: 2px 0 0 22px; line-height: 1.4; }
@@ -227,9 +231,9 @@ function buildPanel() {
       <div class="sec-head"><button class="fold" title="펼치기/접기">▼</button><h2>${c.t}</h2><span class="sum"></span>
         <span class="links"><button data-a="1">전체</button>·<button data-a="0">해제</button></span></div>
       <div class="sec-body">${c.note ? `<div class="note" style="margin:0 0 2px 2px">${c.note}</div>` : ''}${c.items.map((it, k) => `
-        <label class="row${it[2] ? ' two' : ''}" data-k="${k}"><input type="checkbox" checked>
-          <span class="mark"></span><span class="lab">${esc(it[0])}${it[2] ? `<span class="sub-note">${esc(it[2])}</span>` : ''}</span>${j === 0 && SUBS[it[0]] ? `<span class="plinks"><button data-p="1">전체</button>·<button data-p="0">해제</button></span>` : ''}<span class="cnt"></span></label>${j === 0 && SUBS[it[0]] ? SUBS[it[0]].map(sv => `
-        <label class="row subrow" data-sub="${esc(sv)}"><input type="checkbox" checked><span class="lab">${esc(sv)}</span><span class="cnt"></span></label>`).join('') : ''}`).join('')}
+        ${j === 0 && SUBS[it[0]] ? `<div class="row prow" data-k="${k}"><button class="fold sfold" title="하위 항목 펼치기/접기">▼</button>` : `<label class="row${it[2] ? ' two' : ''}" data-k="${k}"><input type="checkbox" checked>`}
+          <span class="mark"></span><span class="lab">${esc(it[0])}${it[2] ? `<span class="sub-note">${esc(it[2])}</span>` : ''}</span>${j === 0 && SUBS[it[0]] ? `<span class="plinks"><button data-p="1">전체</button>·<button data-p="0">해제</button></span>` : ''}<span class="cnt"></span>${j === 0 && SUBS[it[0]] ? '</div>' : '</label>'}${j === 0 && SUBS[it[0]] ? `<div class="subs">` + SUBS[it[0]].map(sv => `
+        <label class="row subrow" data-sub="${esc(sv)}"><input type="checkbox" checked><span class="lab">${esc(sv)}</span><span class="cnt"></span></label>`).join('') + '</div>' : ''}`).join('')}
       </div></div>`).join('');
 
   document.querySelectorAll('#colorChips .chip').forEach(b => b.onclick = () => { state.color = +b.dataset.c; refresh(); });
@@ -245,7 +249,10 @@ function buildPanel() {
       state.sel[j] = on ? new Set(CATS[j].items.map(i => i[0])) : new Set();
       if (j === 0) state.sub = on ? new Set(Object.values(SUBS).flat()) : new Set();
       refresh(); });
-    sec.querySelectorAll('.row[data-k]').forEach(row => row.querySelector('input').onchange = e => {
+    sec.querySelectorAll('.prow').forEach(row => {   // 서울시·투자출연기관: 화살표(또는 이름)로 하위 항목 펼치기/접기
+      const t = () => row.classList.toggle('shut');
+      row.querySelector('.sfold').onclick = t; row.querySelector('.lab').onclick = t; });
+    sec.querySelectorAll('label.row[data-k]').forEach(row => row.querySelector('input').onchange = e => {
       const v = CATS[j].items[+row.dataset.k][0];
       if (j === 0) setParent(v, e.target.checked); else e.target.checked ? state.sel[j].add(v) : state.sel[j].delete(v);
       refresh(); });
@@ -290,8 +297,7 @@ function refresh() {
       const it = c.items[+row.dataset.k];
       const cnt = ART.filter(a => a.f[j] === it[0] && pass(a, j)).length;
       const inp = row.querySelector('input');
-      inp.checked = state.sel[j].has(it[0]);
-      if (j === 0 && SUBS[it[0]]) { const k = SUBS[it[0]].filter(s => state.sub.has(s)).length; inp.indeterminate = k > 0 && k < SUBS[it[0]].length; }
+      if (inp) inp.checked = state.sel[j].has(it[0]);
       row.querySelector('.cnt').textContent = cnt + '점';
       row.classList.toggle('zero', cnt === 0);
       row.querySelector('.mark').outerHTML = `<span class="mark">${markHTML(c, j, it)}</span>`;
